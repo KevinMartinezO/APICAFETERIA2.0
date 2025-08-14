@@ -52,3 +52,45 @@ jobs:
             FIREBASE_CREDENTIALS_BASE64: ${{ secrets.FIREBASE_CREDENTIALS_BASE64 }}
           run: |
             pytest -v test_database.py
+
+    deploy:
+        needs: test
+        runs-on: ubuntu-latest
+        if: github.ref == 'refs/heads/main'
+
+        steps:
+        - uses: actions/checkout@v4
+        - name: Install Railway CLI
+          run: |
+            # Use the official Railway CLI installation method with retry
+            curl -fsSL https://railway.app/install.sh | sh || {
+            echo "First install attempt failed, trying alternative method..."
+            # Alternative: Download from GitHub releases (latest)
+            curl -L https://github.com/railwayapp/cli/releases/latest/download/railway-linux-x86_64.tar.gz -o railway.tar.gz
+            tar -xzf railway.tar.gz
+            sudo mv railway /usr/local/bin/
+            chmod +x /usr/local/bin/railway
+            }
+
+            # Add to PATH if using first method
+            if [ -d "$HOME/.railway/bin" ]; then
+            echo "$HOME/.railway/bin" >> $GITHUB_PATH
+            export PATH="$HOME/.railway/bin:$PATH"
+            fi
+
+            # Verify installation
+            railway --version || railway version || echo "Railway CLI installed but version check failed"
+        - name: Deploy to Railway
+          env:
+            RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          run: |
+            echo "starting deployment..."
+            railway up --service "dulceria-api" || \
+            railway up --service dulceria-api || \
+            railway up --service web || \
+            railway up --service api || \
+            railway up --service app || \
+            railway up --service dulceria-api || \
+            railway up --service dulceria || \
+            railway up --service backend || \
+            (echo "creating new service and deploying" && railway up)
