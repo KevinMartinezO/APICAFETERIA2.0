@@ -1,15 +1,54 @@
-name: Deploy to railway
+name: Deploy to Railway
 
 on:
-  push:
-    branches: [ main ]
+    push:
+        branches: [ main ]
 
 jobs:
-  helloword:
-    runs-on: ubuntu-latest
+    helloworld:
+        runs-on: ubuntu-latest
 
-    steps:
-    - uses: actions/checkout@v4
+        steps:
+        - uses: actions/checkout@v4
 
-    - name: Imprimir en consola
-      run: echo "Hello world, GitHub Actions"
+        - name: Imprimir en consola
+          run:
+            echo "Hello World, GITHUB ACTIONS"
+
+    test:
+        needs: helloworld
+        runs-on: ubuntu-latest
+
+        steps:
+        - uses: actions/checkout@v4
+
+        - name: Set up python 3.13
+          uses: actions/setup-python@v4
+          with:
+            python-version: '3.13'
+
+        - name: Install libraries
+          run: |
+            python -m pip install --upgrade pip
+            pip install -r requirements.txt
+
+        - name: Test FastAPI imports
+          env:
+            MONGODB_URI: ${{ secrets.MONGODB_URI }}
+            MONGO_DB_NAME: ${{ secrets.MONGO_DB_NAME }}
+            SECRET_KEY: ${{ secrets.SECRET_KEY }}
+            FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
+            FIREBASE_CREDENTIALS_BASE64: ${{ secrets.FIREBASE_CREDENTIALS_BASE64 }}
+            RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          run: |
+            python -c "from main import app; print('FASTAPI app imported successfully')"
+
+        - name: Run tests
+          env:
+            MONGODB_URI: ${{ secrets.MONGODB_URI }}
+            MONGO_DB_NAME: ${{ secrets.MONGO_DB_NAME }}
+            SECRET_KEY: ${{ secrets.SECRET_KEY }}
+            FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
+            FIREBASE_CREDENTIALS_BASE64: ${{ secrets.FIREBASE_CREDENTIALS_BASE64 }}
+          run: |
+            pytest -v test_database.py
