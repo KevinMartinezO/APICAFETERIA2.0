@@ -1,7 +1,11 @@
 from models.order_details import OrderDetail, CreateOrderDetail, UpdateOrderDetail
 from pipelines.order_detail_pipelines import (
     get_order_details_pipeline,
-    get_order_detail_by_id_pipeline
+    get_order_detail_by_id_pipeline,
+    validate_order_exists_pipeline,
+    validate_product_exists_pipeline,
+    check_order_detail_exists_pipeline,
+    get_order_details_owner_pipeline
 )
 from utils.mongodb import get_collection
 from bson import ObjectId
@@ -219,17 +223,19 @@ async def create_order_detail(order_id: str, detail_data: CreateOrderDetail, req
 # ============================================================================
 
 async def get_order_details(order_id: str, requesting_user_id: str = None, is_admin: bool = False) -> dict:
-    """Obtener detalles de una orden específica"""
+    """Obtener detalles de una orden específica usando pipeline"""
     try:
-        # Validar ObjectId
         if not ObjectId.is_valid(order_id):
             return {"success": False, "message": "ID de orden inválido", "data": None}
 
-        # Verificar que la orden existe y permisos
-        order_info = orders_collection.find_one({"_id": ObjectId(order_id)})
-        if not order_info:
+        # Validar que la orden existe usando pipeline
+        exists_pipeline = validate_order_exists_pipeline(order_id)
+        exists_result = list(orders_collection.aggregate(exists_pipeline))
+        if not exists_result:
             return {"success": False, "message": "Orden no encontrada", "data": None}
 
+        # Verificar permisos
+        order_info = orders_collection.find_one({"_id": ObjectId(order_id)})
         if not is_admin and requesting_user_id:
             if order_info["id_user"] != requesting_user_id:
                 return {"success": False, "message": "No tienes permiso para ver esta orden", "data": None}
@@ -247,9 +253,45 @@ async def get_order_details(order_id: str, requesting_user_id: str = None, is_ad
                 "total_items": len(details)
             }
         }
-
     except Exception as e:
         return {"success": False, "message": f"Error: {str(e)}", "data": None}
+
+async def get_order_detail_by_id(detail_id: str) -> dict:
+    """Obtener un detalle específico de orden usando pipeline"""
+    try:
+        if not ObjectId.is_valid(detail_id):
+            return {"success": False, "message": "ID de detalle inválido", "data": None}
+        pipeline = get_order_detail_by_id_pipeline(detail_id)
+        result = list(order_details_collection.aggregate(pipeline))
+        if not result:
+            return {"success": False, "message": "Detalle no encontrado", "data": None}
+        return {
+            "success": True,
+            "message": "Detalle obtenido exitosamente",
+            "data": result[0]
+        }
+    except Exception as e:
+        return {"success": False, "message": f"Error: {str(e)}", "data": None}
+
+async def validate_product_exists(product_id: str) -> bool:
+    """Validar que un producto existe usando pipeline"""
+    pipeline = validate_product_exists_pipeline(product_id)
+    result = list(catalogs_collection.aggregate(pipeline))
+    return bool(result)
+
+async def check_order_detail_exists(order_id: str, product_id: str) -> bool:
+    """Verificar si ya existe un detalle de orden para un producto específico usando pipeline"""
+    pipeline = check_order_detail_exists_pipeline(order_id, product_id)
+    result = list(order_details_collection.aggregate(pipeline))
+    return bool(result)
+
+async def get_order_details_owner(detail_id: str) -> str:
+    """Obtener el propietario de un detalle de orden usando pipeline"""
+    pipeline = get_order_details_owner_pipeline(detail_id)
+    result = list(order_details_collection.aggregate(pipeline))
+    if result and "id_user" in result[0]:
+        return result[0]["id_user"]
+    return None
 
 # ============================================================================
 # ORDER DETAILS - FUNCIONES DE ACTUALIZACIÓN
