@@ -2,12 +2,6 @@ from models.order_statuses import OrderStatus
 from utils.mongodb import get_collection
 from fastapi import HTTPException
 from bson import ObjectId
-from pipelines.order_status_pipelines import (
-    get_order_status_with_orders_pipeline,
-    get_all_order_status_pipeline,
-    validate_order_status_pipeline,
-    search_order_status_pipeline
-)
 
 coll = get_collection("order_statuses")
 
@@ -36,33 +30,44 @@ async def create_order_status(order_status: OrderStatus) -> dict:
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error creating order status: {str(e)}")
 
-async def get_order_statuses(skip: int = 0, limit: int = 10) -> dict:
-    """Obtener todos los order statuses con paginación usando pipeline"""
+async def get_order_statuses() -> dict:
+    """Obtener todos los order statuses"""
     try:
-        pipeline = get_all_order_status_pipeline(skip, limit)
-        order_statuses_cursor = coll.aggregate(pipeline)
-        order_statuses = [status for status in order_statuses_cursor]
+        # Obtener todos los order statuses directamente
+        order_statuses_cursor = coll.find({})
+        order_statuses = []
+        
+        for status in order_statuses_cursor:
+            status["id"] = str(status["_id"])
+            del status["_id"]
+            order_statuses.append(status)
+        
         return {
             "order_statuses": order_statuses,
             "total": len(order_statuses)
         }
+        
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching order statuses: {str(e)}")
 
 async def get_order_status_by_id(order_status_id: str) -> dict:
-    """Obtener un order status por ID y sus órdenes usando pipeline"""
+    """Obtener un order status por ID"""
     try:
         # Validar ObjectId
         if not ObjectId.is_valid(order_status_id):
             raise HTTPException(status_code=400, detail="Invalid order status ID")
         
-        pipeline = get_order_status_with_orders_pipeline(order_status_id)
-        result = list(coll.aggregate(pipeline))
-
-        if not result:
+        # Buscar el order status directamente
+        order_status = coll.find_one({"_id": ObjectId(order_status_id)})
+        
+        if not order_status:
             raise HTTPException(status_code=404, detail="Order status not found")
         
-        return result[0]
+        # Convertir ObjectId a string para la respuesta
+        order_status["id"] = str(order_status["_id"])
+        del order_status["_id"]
+        
+        return order_status
         
     except HTTPException:
         raise
@@ -145,35 +150,3 @@ async def delete_order_status(order_status_id: str) -> dict:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error deleting order status: {str(e)}")
-
-async def validate_order_status(order_status_id: str) -> dict:
-    """Validar que un order_status existe y está activo usando pipeline"""
-    try:
-        # Validar ObjectId
-        if not ObjectId.is_valid(order_status_id):
-            raise HTTPException(status_code=400, detail="Invalid order status ID")
-        
-        pipeline = validate_order_status_pipeline(order_status_id)
-        result = list(coll.aggregate(pipeline))
-
-        if not result:
-            raise HTTPException(status_code=404, detail="Order status not found or inactive")
-        
-        return result[0]
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error validating order status: {str(e)}")
-
-async def search_order_statuses(search_term: str, skip: int = 0, limit: int = 10) -> dict:
-    """Buscar estados de orden por nombre o descripción usando pipeline"""
-    try:
-        pipeline = search_order_status_pipeline(search_term, skip, limit)
-        results = list(coll.aggregate(pipeline))
-        return {
-            "results": results,
-            "total": len(results)
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error searching order statuses: {str(e)}")

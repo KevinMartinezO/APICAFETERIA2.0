@@ -3,7 +3,7 @@ from bson import ObjectId
 def get_order_details_pipeline(order_id: str) -> list:
     """Pipeline para obtener TODOS los detalles de una orden con información del producto"""
     return [
-        {"$match": {"id_order": ObjectId(order_id), "active": True}},
+        {"$match": {"id_order": order_id, "active": True}},  # <--- order_id como string
         {
             "$lookup": {
                 "from": "catalogs",
@@ -15,8 +15,8 @@ def get_order_details_pipeline(order_id: str) -> list:
         {
             "$project": {
                 "id": {"$toString": "$_id"},
-                "id_order": {"$toString": "$id_order"},
-                "id_producto": {"$toString": "$id_producto"},
+                "id_order": 1,
+                "id_producto": 1,
                 "product_name": {"$arrayElemAt": ["$product_info.name", 0]},
                 "product_cost": {"$arrayElemAt": ["$product_info.cost", 0]},
                 "quantity": 1,
